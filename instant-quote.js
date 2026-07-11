@@ -5,6 +5,8 @@
   const $$ = selector => [...document.querySelectorAll(selector)];
   const currency = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' });
   const MAX_FILES = 10;
+  const SHEET_WIDTH_MM = 1200;
+  const SHEET_LENGTH_MM = 2400;
   const STORAGE_KEY = 'cortenLivingInstantQuoteDraftsV2';
 
   const MATERIALS = {
@@ -77,6 +79,12 @@
     let end = Math.atan2(p2.y - center.y, p2.x - center.x) * 180 / Math.PI;
     if (bulge < 0) [start, end] = [end, start];
     return { center, radius, start, end, clockwise: bulge < 0, length: Math.abs(radius * theta) };
+  }
+
+  function fitsStandardSheet(width, height) {
+    const shortSide = Math.min(width, height);
+    const longSide = Math.max(width, height);
+    return shortSide <= SHEET_WIDTH_MM && longSide <= SHEET_LENGTH_MM;
   }
 
   function parseDXF(text, filename) {
@@ -167,10 +175,10 @@
     const width = bounds.maxX - bounds.minX;
     const height = bounds.maxY - bounds.minY;
     if (width <= 0 || height <= 0) warnings.push('The drawing has a zero or very small overall dimension. Check the DXF export and drawing units.');
-    if (width > 3000 || height > 1500) warnings.push('This part may exceed the standard sheet or machine area and will require manual review.');
+    const sheetError = !fitsStandardSheet(width, height);
     if (entities.some(entity => entity.type === 'SPLINE' || entity.type === 'ELLIPSE')) warnings.push('Splines or ellipses need manual review.');
 
-    return { id: createPartId(), filename, entities, bounds, width, height, cutLength, pierces, warnings, quantity: 1 };
+    return { id: createPartId(), filename, entities, bounds, width, height, cutLength, pierces, warnings, sheetError, quantity: 1 };
   }
 
   function pointOnCircle(cx, cy, radius, degrees) {
@@ -261,8 +269,9 @@
     let subtotal = (materialEach + cuttingEach) * quantity * quantityEfficiency;
     if (els.leadTime.value === 'priority') subtotal *= PRICING.priorityMultiplier;
     const gst = subtotal * PRICING.gst;
-    const needsReview = part.warnings.length > 0 || part.width > 3000 || part.height > 1500;
-    return { partId: part.id, materialKey, material, thickness, quantity, areaM2, massKgEach, materialEach, cuttingMinutesEach, subtotal, gst, total: subtotal + gst, needsReview };
+    const sheetError = Boolean(part.sheetError);
+    const needsReview = part.warnings.length > 0 || sheetError;
+    return { partId: part.id, materialKey, material, thickness, quantity, areaM2, massKgEach, materialEach, cuttingMinutesEach, subtotal, gst, total: subtotal + gst, needsReview, sheetError };
   }
 
   function basketCalculation() {
@@ -275,7 +284,8 @@
       gst,
       total: subtotal + gst,
       totalQuantity: items.reduce((sum, item) => sum + item.quote.quantity, 0),
-      needsReview: items.some(item => item.quote.needsReview)
+      needsReview: items.some(item => item.quote.needsReview),
+      hasSheetError: items.some(item => item.quote.sheetError)
     };
   }
 
@@ -337,7 +347,7 @@
     els.quoteItemList.replaceChildren();
     basket.items.forEach(({ part, quote }, index) => {
       const item = document.createElement('article');
-      item.className = `quote-item-card${index === state.activeIndex ? ' active' : ''}`;
+      item.className = `quote-item-card${index === state.activeIndex ? ' active' : ''}${quote.sheetError ? ' error' : ''}`;
       item.tabIndex = 0;
       item.setAttribute('role', 'button');
       item.setAttribute('aria-label', `Preview ${part.filename}`);
@@ -354,7 +364,11 @@
 
       const details = document.createElement('div'); details.className = 'quote-item-details';
       const name = document.createElement('strong'); name.className = 'quote-item-name'; name.textContent = part.filename; name.title = part.filename;
-      const size = document.createElement('small'); size.textContent = `${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm`;
+      const size = document.createElement('small');
+      size.textContent = quote.sheetError
+        ? `${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm · TOO LARGE FOR SHEET`
+        : `${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm`;
+      if (quote.sheetError) size.classList.add('sheet-error-label');
       const quantityLabel = document.createElement('span'); quantityLabel.className = 'quantity-label'; quantityLabel.textContent = 'Qty';
       const qtyRow = document.createElement('div'); qtyRow.className = 'quantity-row';
       qtyRow.append(quantityLabel, createQuantityControl(part));
@@ -364,8 +378,16 @@
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'quote-item-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${part.filename}`);
       remove.addEventListener('click', event => { event.stopPropagation(); removePart(index); });
-      const price = document.createElement('strong'); price.textContent = currency.format(quote.subtotal);
-      const taxLabel = document.createElement('small'); taxLabel.textContent = 'ex GST';
+      const price = document.createElement('strong');
+      const taxLabel = document.createElement('small');
+      if (quote.sheetError) {
+        price.textContent = 'SHEET ERROR';
+        taxLabel.textContent = 'NO PRICE';
+        priceArea.classList.add('error');
+      } else {
+        price.textContent = currency.format(quote.subtotal);
+        taxLabel.textContent = 'ex GST';
+      }
       priceArea.append(remove, price, taxLabel);
 
       item.append(thumb, details, priceArea);
@@ -385,10 +407,13 @@
     $('#summary-material').textContent = `${basket.items[0].quote.material.name} · ${basket.items[0].quote.thickness} mm`;
     $('#summary-count').textContent = `${state.parts.length} file${state.parts.length === 1 ? '' : 's'} · ${basket.totalQuantity} item${basket.totalQuantity === 1 ? '' : 's'}`;
     renderQuoteItems(basket);
-    $('#summary-subtotal').textContent = currency.format(basket.subtotal);
-    $('#summary-gst').textContent = currency.format(basket.gst);
-    $('#summary-total').textContent = currency.format(basket.total);
+    $('#summary-subtotal').textContent = basket.hasSheetError ? '—' : currency.format(basket.subtotal);
+    $('#summary-gst').textContent = basket.hasSheetError ? '—' : currency.format(basket.gst);
+    $('#summary-total').textContent = basket.hasSheetError ? 'Cannot quote' : currency.format(basket.total);
     $('#review-flag').hidden = !basket.needsReview;
+    $('#review-flag').textContent = basket.hasSheetError
+      ? 'One or more parts will not fit a standard 1200 × 2400 mm sheet, even when rotated. Remove or resize the highlighted file before an instant price can be calculated.'
+      : 'Manual review is required before this price can be confirmed.';
     $$('.quote-steps li').forEach((step, index) => step.classList.toggle('active', index <= 1));
   }
 
@@ -400,8 +425,14 @@
     $('#stat-cut-length').textContent = `${(part.cutLength / 1000).toFixed(2)} m`;
     $('#stat-pierces').textContent = part.pierces;
     $('#stat-entities').textContent = part.entities.length;
-    els.warning.hidden = part.warnings.length === 0;
-    els.warning.textContent = part.warnings.join(' ');
+    const messages = [...part.warnings];
+    if (part.sheetError) messages.unshift(`ERROR: This part is ${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm and will not fit a standard ${SHEET_WIDTH_MM} × ${SHEET_LENGTH_MM} mm sheet, even when rotated.`);
+    els.warning.hidden = messages.length === 0;
+    els.warning.textContent = messages.join(' ');
+    els.warning.classList.toggle('error', Boolean(part.sheetError));
+    els.partPanel.classList.toggle('sheet-error', Boolean(part.sheetError));
+    $('#stat-sheet-fit').textContent = part.sheetError ? 'Too large' : 'Fits';
+    $('#stat-sheet-fit').classList.toggle('error-text', Boolean(part.sheetError));
     renderPreview(part);
     updateSummary();
   }
@@ -410,7 +441,7 @@
     els.tabs.innerHTML = '';
     state.parts.forEach((part, index) => {
       const tab = document.createElement('div');
-      tab.className = `part-tab-item${index === state.activeIndex ? ' active' : ''}`;
+      tab.className = `part-tab-item${index === state.activeIndex ? ' active' : ''}${part.sheetError ? ' error' : ''}`;
       const select = document.createElement('button');
       select.type = 'button'; select.className = 'part-tab'; select.textContent = part.filename; select.title = part.filename;
       select.addEventListener('click', () => setActivePart(index));
@@ -485,12 +516,13 @@
       thickness: firstQuote.thickness,
       leadTime: els.leadTime.value,
       notes: els.notes.value.trim(),
-      parts: basket.items.map(({ part, quote }) => ({ filename: part.filename, width: part.width, height: part.height, cutLength: part.cutLength, quantity: quote.quantity, subtotal: quote.subtotal, needsReview: quote.needsReview })),
+      parts: basket.items.map(({ part, quote }) => ({ filename: part.filename, width: part.width, height: part.height, cutLength: part.cutLength, quantity: quote.quantity, subtotal: quote.subtotal, needsReview: quote.needsReview, sheetError: quote.sheetError })),
       totalQuantity: basket.totalQuantity,
       subtotal: basket.subtotal,
       gst: basket.gst,
       total: basket.total,
-      needsReview: basket.needsReview
+      needsReview: basket.needsReview,
+      hasSheetError: basket.hasSheetError
     };
   }
 
@@ -506,7 +538,7 @@
       const fileCount = draft.parts?.length || 1;
       const title = draft.parts?.[0]?.filename || draft.filename || 'Saved quote';
       const extraFiles = fileCount > 1 ? ` + ${fileCount - 1} more` : '';
-      item.innerHTML = `<div><strong>${escapeHTML(title)}${escapeHTML(extraFiles)}</strong><small>${escapeHTML(draft.materialName)} · ${draft.thickness} mm · ${draft.totalQuantity || draft.quantity || 1} items · ${currency.format(draft.total)}</small></div><button type="button" class="email">Email</button><button type="button" class="delete">Delete</button>`;
+      item.innerHTML = `<div><strong>${escapeHTML(title)}${escapeHTML(extraFiles)}</strong><small>${escapeHTML(draft.materialName)} · ${draft.thickness} mm · ${draft.totalQuantity || draft.quantity || 1} items · ${draft.hasSheetError ? 'SHEET ERROR' : currency.format(draft.total)}</small></div><button type="button" class="email">Email</button><button type="button" class="delete">Delete</button>`;
       item.querySelector('.email').addEventListener('click', () => emailDraft(draft));
       item.querySelector('.delete').addEventListener('click', () => writeDrafts(readDrafts().filter(saved => saved.id !== draft.id)));
       els.savedList.appendChild(item);
@@ -524,8 +556,8 @@
 
   function emailDraft(draft) {
     const parts = draft.parts || [{ filename: draft.filename, width: draft.width, height: draft.height, quantity: draft.quantity, subtotal: draft.subtotal }];
-    const partLines = parts.map((part, index) => `${index + 1}. ${part.filename}\n   Size: ${Number(part.width).toFixed(1)} x ${Number(part.height).toFixed(1)} mm\n   Quantity: ${part.quantity}\n   Line price ex GST: ${currency.format(part.subtotal)}`).join('\n\n');
-    const body = `Corten Living Instant Quote\n\nMaterial: ${draft.materialName}, ${draft.thickness} mm\nLead time: ${draft.leadTime === 'priority' ? 'Priority' : 'Standard'}\n\nParts:\n${partLines}\n\nEstimated subtotal: ${currency.format(draft.subtotal)}\nGST: ${currency.format(draft.gst)}\nEstimated total: ${currency.format(draft.total)}\nManual review: ${draft.needsReview ? 'Required' : 'Not currently flagged'}\n\nNotes: ${draft.notes || 'None'}\n\nPlease confirm manufacturability, final pricing, freight and lead time.`;
+    const partLines = parts.map((part, index) => `${index + 1}. ${part.filename}\n   Size: ${Number(part.width).toFixed(1)} x ${Number(part.height).toFixed(1)} mm\n   Quantity: ${part.quantity}\n   Sheet fit: ${part.sheetError ? 'ERROR - exceeds 1200 x 2400 mm sheet' : 'Fits standard sheet'}\n   Line price ex GST: ${part.sheetError ? 'Not calculated' : currency.format(part.subtotal)}`).join('\n\n');
+    const body = `Corten Living Instant Quote\n\nMaterial: ${draft.materialName}, ${draft.thickness} mm\nLead time: ${draft.leadTime === 'priority' ? 'Priority' : 'Standard'}\n\nParts:\n${partLines}\n\nEstimated subtotal: ${draft.hasSheetError ? 'Not calculated' : currency.format(draft.subtotal)}\nGST: ${draft.hasSheetError ? 'Not calculated' : currency.format(draft.gst)}\nEstimated total: ${draft.hasSheetError ? 'Cannot quote - oversized part' : currency.format(draft.total)}\nManual review: ${draft.needsReview ? 'Required' : 'Not currently flagged'}\n\nNotes: ${draft.notes || 'None'}\n\nPlease confirm manufacturability, final pricing, freight and lead time.`;
     const subjectPart = parts.length === 1 ? parts[0].filename : `${parts.length} DXF files`;
     location.href = `mailto:cortenliving@gmail.com?subject=${encodeURIComponent(`Instant Quote — ${subjectPart}`)}&body=${encodeURIComponent(body)}`;
   }

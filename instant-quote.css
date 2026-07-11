@@ -41,3 +41,19 @@
 
 @media(max-width:1120px){.quote-item-card{grid-template-columns:62px minmax(0,1fr) auto}.quote-item-thumb{height:56px}.item-quantity{grid-template-columns:23px 36px 23px}.item-quantity input{width:36px}.quote-item-price{min-width:62px}}
 @media(max-width:620px){.quote-item-list{max-height:none}.quote-item-card{grid-template-columns:70px minmax(0,1fr) auto}.summary-selection{flex-direction:column;gap:4px}.summary-selection span{text-align:left}.part-tab-item .part-tab{max-width:170px}}
+
+/* Standard sheet size validation */
+.geometry-warning.error{background:#fde8e5;color:#7f1f17;border-left-color:#b82f23;font-weight:600}
+.part-panel.sheet-error .drawing-preview{border-color:#b82f23;box-shadow:0 0 0 2px rgba(184,47,35,.16)}
+.part-panel.sheet-error .dxf-entity{stroke:#ef5a4c}
+.error-text{color:#a6261c!important}
+.part-tab-item.error{border-color:#b83a2e;background:#fff0ee}
+.part-tab-item.error .part-tab{color:#8f2118;font-weight:700}
+.part-tab-item.error.active{background:#5b211d;border-color:#d4574b}
+.part-tab-item.error.active .part-tab{color:#fff}
+.quote-item-card.error{border-color:#b83a2e;background:#3b2523}
+.quote-item-card.error:hover,.quote-item-card.error.active{border-color:#ef6b5f;background:#482927}
+.quote-item-card.error .quote-item-thumb{border-color:#8e332b}
+.sheet-error-label{color:#ff8b80!important;font-weight:700;text-transform:uppercase}
+.quote-item-price.error strong{font-size:14px;color:#ff7569;text-align:right}
+.quote-item-price.error small{color:#ff9d95}
