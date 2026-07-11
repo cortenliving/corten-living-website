@@ -34,7 +34,7 @@
         <div>
           <p class="eyebrow rust">Corten Living dashboard</p>
           <h1>Instant Quote</h1>
-          <p>Upload a 2D DXF, check the geometry, choose material and quantity, then get an immediate budget estimate.</p>
+          <p>Upload 2D DXF files, check each part, set an individual quantity, then get an immediate budget estimate.</p>
         </div>
         <div class="quote-status"><span></span> Prototype pricing engine live</div>
       </div>
@@ -66,8 +66,8 @@
 
           <section class="quote-panel part-panel" id="part-panel" aria-labelledby="part-title" hidden>
             <div class="panel-heading">
-              <div><p class="panel-kicker">Geometry check</p><h2 id="part-title">Your part</h2></div>
-              <button class="text-button danger" id="clear-parts" type="button">Clear</button>
+              <div><p class="panel-kicker">Geometry check</p><h2 id="part-title">Your parts</h2></div>
+              <button class="text-button danger" id="clear-parts" type="button">Clear all</button>
             </div>
             <div class="part-tabs" id="part-tabs" role="tablist"></div>
             <div class="part-detail-grid">
@@ -92,15 +92,8 @@
             <div class="form-grid">
               <label><span>Material</span><select id="material-select"><option value="corten">Corten steel</option><option value="mild">Mild steel</option><option value="stainless">Stainless steel</option><option value="aluminium">Aluminium</option></select></label>
               <label><span>Thickness</span><select id="thickness-select"></select></label>
-              <label><span>Quantity</span><input id="quantity-input" type="number" min="1" max="999" step="1" value="1"></label>
               <label><span>Required by</span><select id="lead-time-select"><option value="standard">Standard · 7–10 working days</option><option value="priority">Priority · 3–5 working days</option></select></label>
             </div>
-            <fieldset class="process-options">
-              <legend>Additional processes</legend>
-              <label><input type="checkbox" data-process="deburr"><span><strong>Deburr edges</strong><small>Remove sharp edges after cutting</small></span><b>+$8.00</b></label>
-              <label><input type="checkbox" data-process="engrave"><span><strong>Laser marking</strong><small>Basic line marking or part identification</small></span><b>+$12.00</b></label>
-              <label><input type="checkbox" data-process="fold"><span><strong>Folding required</strong><small>Flags the quote for manual review</small></span><b>Review</b></label>
-            </fieldset>
             <label class="notes-field"><span>Job notes <em>optional</em></span><textarea id="job-notes" placeholder="Finish, tolerances, folding details, delivery notes or anything else we should know"></textarea></label>
           </section>
 
@@ -112,18 +105,14 @@
 
         <aside class="quote-summary" aria-labelledby="summary-title">
           <div class="summary-top"><p class="panel-kicker">Live estimate</p><h2 id="summary-title">Quote summary</h2></div>
-          <div class="summary-placeholder" id="summary-placeholder"><span>⌁</span><p>Upload a DXF to calculate a price.</p></div>
+          <div class="summary-placeholder" id="summary-placeholder"><span>⌁</span><p>Upload DXF files to build your quote.</p></div>
           <div id="summary-content" hidden>
-            <div class="summary-part"><strong id="summary-file">Part.dxf</strong><span id="summary-size">— × — mm</span></div>
-            <dl class="summary-lines">
-              <div><dt>Material</dt><dd id="summary-material">—</dd></div>
-              <div><dt>Quantity</dt><dd id="summary-quantity">1</dd></div>
-              <div><dt>Material &amp; cutting</dt><dd id="summary-cutting">$0.00</dd></div>
-              <div><dt>Setup</dt><dd id="summary-setup">$0.00</dd></div>
-              <div><dt>Extras</dt><dd id="summary-extras">$0.00</dd></div>
-              <div class="summary-minimum" id="minimum-row" hidden><dt>Minimum charge adjustment</dt><dd id="summary-minimum">$0.00</dd></div>
-            </dl>
-            <div class="summary-subtotal"><span>Subtotal</span><strong id="summary-subtotal">$0.00</strong></div>
+            <div class="summary-selection">
+              <strong id="summary-material">—</strong>
+              <span id="summary-count">—</span>
+            </div>
+            <div class="quote-item-list" id="quote-item-list" aria-label="DXF files in this quote"></div>
+            <div class="summary-subtotal"><span>Parts subtotal</span><strong id="summary-subtotal">$0.00</strong></div>
             <div class="summary-gst"><span>GST (15%)</span><span id="summary-gst">$0.00</span></div>
             <div class="summary-total"><span>Estimated total</span><strong id="summary-total">$0.00</strong></div>
             <p class="review-flag" id="review-flag" hidden>Manual review is required before this price can be confirmed.</p>

@@ -5,7 +5,7 @@
   const $$ = selector => [...document.querySelectorAll(selector)];
   const currency = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' });
   const MAX_FILES = 10;
-  const STORAGE_KEY = 'cortenLivingInstantQuoteDraftsV1';
+  const STORAGE_KEY = 'cortenLivingInstantQuoteDraftsV2';
 
   const MATERIALS = {
     corten: { name: 'Corten steel', density: 7850, sheetRate: 7.9, thicknesses: [1.6, 2, 3, 4, 5, 6], cutFactor: 1.08 },
@@ -15,14 +15,11 @@
   };
 
   const PRICING = {
-    setup: 18,
-    minimumSubtotal: 45,
     machineRatePerMinute: 2.15,
     piercePrice: 0.42,
     materialWasteFactor: 1.22,
     gst: 0.15,
-    priorityMultiplier: 1.2,
-    process: { deburr: 8, engrave: 12 }
+    priorityMultiplier: 1.2
   };
 
   const state = { parts: [], activeIndex: 0 };
@@ -31,12 +28,17 @@
     input: $('#dxf-input'), dropZone: $('#drop-zone'), uploadMessage: $('#upload-message'), loadSample: $('#load-sample'),
     partPanel: $('#part-panel'), configPanel: $('#configuration-panel'), tabs: $('#part-tabs'), preview: $('#dxf-preview'),
     previewFilename: $('#preview-filename'), warning: $('#geometry-warning'), clear: $('#clear-parts'), material: $('#material-select'),
-    thickness: $('#thickness-select'), quantity: $('#quantity-input'), leadTime: $('#lead-time-select'), notes: $('#job-notes'),
-    summaryPlaceholder: $('#summary-placeholder'), summaryContent: $('#summary-content'), savedList: $('#saved-quote-list'),
+    thickness: $('#thickness-select'), leadTime: $('#lead-time-select'), notes: $('#job-notes'),
+    summaryPlaceholder: $('#summary-placeholder'), summaryContent: $('#summary-content'), quoteItemList: $('#quote-item-list'), savedList: $('#saved-quote-list'),
     saveQuote: $('#save-quote'), emailQuote: $('#email-quote')
   };
 
   if (!els.input) return;
+
+  function createPartId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `part-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
 
   function parsePairs(text) {
     const lines = text.replace(/\r/g, '').split('\n');
@@ -168,7 +170,7 @@
     if (width > 3000 || height > 1500) warnings.push('This part may exceed the standard sheet or machine area and will require manual review.');
     if (entities.some(entity => entity.type === 'SPLINE' || entity.type === 'ELLIPSE')) warnings.push('Splines or ellipses need manual review.');
 
-    return { filename, entities, bounds, width, height, cutLength, pierces, warnings };
+    return { id: createPartId(), filename, entities, bounds, width, height, cutLength, pierces, warnings, quantity: 1 };
   }
 
   function pointOnCircle(cx, cy, radius, degrees) {
@@ -176,15 +178,14 @@
     return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
   }
 
-  function renderPreview(part) {
-    const svg = els.preview;
+  function renderPartSvg(svg, part, viewportWidth = 720, viewportHeight = 440, padding = 34) {
     svg.replaceChildren();
-    const padding = 34;
+    svg.setAttribute('viewBox', `0 0 ${viewportWidth} ${viewportHeight}`);
     const width = Math.max(part.width, 1);
     const height = Math.max(part.height, 1);
-    const scale = Math.min((720 - padding * 2) / width, (440 - padding * 2) / height);
-    const offsetX = (720 - width * scale) / 2 - part.bounds.minX * scale;
-    const offsetY = (440 - height * scale) / 2 + part.bounds.maxY * scale;
+    const scale = Math.min((viewportWidth - padding * 2) / width, (viewportHeight - padding * 2) / height);
+    const offsetX = (viewportWidth - width * scale) / 2 - part.bounds.minX * scale;
+    const offsetY = (viewportHeight - height * scale) / 2 + part.bounds.maxY * scale;
     const transformPoint = point => ({ x: point.x * scale + offsetX, y: offsetY - point.y * scale });
 
     const make = (name, attrs, className = 'dxf-entity') => {
@@ -228,6 +229,10 @@
     });
   }
 
+  function renderPreview(part) {
+    renderPartSvg(els.preview, part, 720, 440, 34);
+  }
+
   function populateThicknesses(preferred = 3) {
     const material = MATERIALS[els.material.value];
     els.thickness.innerHTML = material.thicknesses.map(value => `<option value="${value}" ${value === preferred ? 'selected' : ''}>${value} mm</option>`).join('');
@@ -235,13 +240,17 @@
 
   function currentPart() { return state.parts[state.activeIndex] || null; }
 
-  function quoteCalculation() {
-    const part = currentPart();
+  function normaliseQuantity(value) {
+    return Math.max(1, Math.min(999, Math.round(Number.parseFloat(value) || 1)));
+  }
+
+  function quoteCalculation(part) {
     if (!part) return null;
     const materialKey = els.material.value;
     const material = MATERIALS[materialKey];
     const thickness = Number.parseFloat(els.thickness.value) || 3;
-    const quantity = Math.max(1, Math.min(999, Math.round(Number.parseFloat(els.quantity.value) || 1)));
+    const quantity = normaliseQuantity(part.quantity);
+    part.quantity = quantity;
     const areaM2 = Math.max(part.width * part.height / 1_000_000, 0.0001);
     const massKgEach = areaM2 * thickness / 1000 * material.density;
     const materialEach = massKgEach * material.sheetRate * PRICING.materialWasteFactor;
@@ -249,38 +258,137 @@
     const cuttingMinutesEach = part.cutLength / speedMmPerMinute + part.pierces * 0.055;
     const cuttingEach = cuttingMinutesEach * PRICING.machineRatePerMinute + part.pierces * PRICING.piercePrice;
     const quantityEfficiency = quantity >= 20 ? 0.85 : quantity >= 10 ? 0.9 : quantity >= 5 ? 0.95 : 1;
-    let cuttingMaterial = (materialEach + cuttingEach) * quantity * quantityEfficiency;
-    if (els.leadTime.value === 'priority') cuttingMaterial *= PRICING.priorityMultiplier;
-    const checked = $$('[data-process]:checked').map(input => input.dataset.process);
-    const extras = checked.reduce((sum, process) => sum + (PRICING.process[process] || 0), 0);
-    const needsReview = checked.includes('fold') || part.warnings.length > 0 || part.width > 3000 || part.height > 1500;
-    const setup = PRICING.setup;
-    const rawSubtotal = cuttingMaterial + setup + extras;
-    const minimumAdjustment = Math.max(0, PRICING.minimumSubtotal - rawSubtotal);
-    const subtotal = rawSubtotal + minimumAdjustment;
+    let subtotal = (materialEach + cuttingEach) * quantity * quantityEfficiency;
+    if (els.leadTime.value === 'priority') subtotal *= PRICING.priorityMultiplier;
     const gst = subtotal * PRICING.gst;
-    return { materialKey, material, thickness, quantity, areaM2, massKgEach, materialEach, cuttingMinutesEach, cuttingMaterial, setup, extras, minimumAdjustment, subtotal, gst, total: subtotal + gst, checked, needsReview };
+    const needsReview = part.warnings.length > 0 || part.width > 3000 || part.height > 1500;
+    return { partId: part.id, materialKey, material, thickness, quantity, areaM2, massKgEach, materialEach, cuttingMinutesEach, subtotal, gst, total: subtotal + gst, needsReview };
+  }
+
+  function basketCalculation() {
+    const items = state.parts.map(part => ({ part, quote: quoteCalculation(part) }));
+    const subtotal = items.reduce((sum, item) => sum + item.quote.subtotal, 0);
+    const gst = subtotal * PRICING.gst;
+    return {
+      items,
+      subtotal,
+      gst,
+      total: subtotal + gst,
+      totalQuantity: items.reduce((sum, item) => sum + item.quote.quantity, 0),
+      needsReview: items.some(item => item.quote.needsReview)
+    };
   }
 
   function formatDimension(value) { return `${value.toFixed(value >= 100 ? 0 : 1)} mm`; }
 
+  function setActivePart(index, shouldScroll = false) {
+    if (index < 0 || index >= state.parts.length) return;
+    state.activeIndex = index;
+    renderTabs();
+    renderActivePart();
+    if (shouldScroll) els.partPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function removePart(index) {
+    if (index < 0 || index >= state.parts.length) return;
+    state.parts.splice(index, 1);
+    if (!state.parts.length) {
+      resetQuoteWorkspace();
+      return;
+    }
+    if (index < state.activeIndex) state.activeIndex -= 1;
+    else if (state.activeIndex >= state.parts.length) state.activeIndex = state.parts.length - 1;
+    renderTabs();
+    renderActivePart();
+  }
+
+  function changePartQuantity(partId, nextValue) {
+    const part = state.parts.find(item => item.id === partId);
+    if (!part) return;
+    part.quantity = normaliseQuantity(nextValue);
+    updateSummary();
+  }
+
+  function createQuantityControl(part) {
+    const control = document.createElement('div');
+    control.className = 'item-quantity';
+    control.setAttribute('aria-label', `Quantity for ${part.filename}`);
+
+    const minus = document.createElement('button');
+    minus.type = 'button'; minus.textContent = '−'; minus.setAttribute('aria-label', 'Decrease quantity');
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '1'; input.max = '999'; input.step = '1'; input.value = normaliseQuantity(part.quantity); input.setAttribute('aria-label', 'Quantity');
+    const plus = document.createElement('button');
+    plus.type = 'button'; plus.textContent = '+'; plus.setAttribute('aria-label', 'Increase quantity');
+
+    [minus, input, plus].forEach(element => element.addEventListener('click', event => event.stopPropagation()));
+    minus.addEventListener('click', () => changePartQuantity(part.id, normaliseQuantity(part.quantity) - 1));
+    plus.addEventListener('click', () => changePartQuantity(part.id, normaliseQuantity(part.quantity) + 1));
+    input.addEventListener('change', () => changePartQuantity(part.id, input.value));
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); changePartQuantity(part.id, input.value); }
+    });
+
+    control.append(minus, input, plus);
+    return control;
+  }
+
+  function renderQuoteItems(basket) {
+    els.quoteItemList.replaceChildren();
+    basket.items.forEach(({ part, quote }, index) => {
+      const item = document.createElement('article');
+      item.className = `quote-item-card${index === state.activeIndex ? ' active' : ''}`;
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.setAttribute('aria-label', `Preview ${part.filename}`);
+      item.addEventListener('click', () => setActivePart(index, true));
+      item.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActivePart(index, true); }
+      });
+
+      const thumb = document.createElement('div'); thumb.className = 'quote-item-thumb';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('aria-hidden', 'true');
+      thumb.appendChild(svg);
+      renderPartSvg(svg, part, 150, 100, 12);
+
+      const details = document.createElement('div'); details.className = 'quote-item-details';
+      const name = document.createElement('strong'); name.className = 'quote-item-name'; name.textContent = part.filename; name.title = part.filename;
+      const size = document.createElement('small'); size.textContent = `${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm`;
+      const quantityLabel = document.createElement('span'); quantityLabel.className = 'quantity-label'; quantityLabel.textContent = 'Qty';
+      const qtyRow = document.createElement('div'); qtyRow.className = 'quantity-row';
+      qtyRow.append(quantityLabel, createQuantityControl(part));
+      details.append(name, size, qtyRow);
+
+      const priceArea = document.createElement('div'); priceArea.className = 'quote-item-price';
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'quote-item-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${part.filename}`);
+      remove.addEventListener('click', event => { event.stopPropagation(); removePart(index); });
+      const price = document.createElement('strong'); price.textContent = currency.format(quote.subtotal);
+      const taxLabel = document.createElement('small'); taxLabel.textContent = 'ex GST';
+      priceArea.append(remove, price, taxLabel);
+
+      item.append(thumb, details, priceArea);
+      els.quoteItemList.appendChild(item);
+    });
+  }
+
   function updateSummary() {
-    const part = currentPart(); const quote = quoteCalculation();
-    if (!part || !quote) { els.summaryPlaceholder.hidden = false; els.summaryContent.hidden = true; return; }
-    els.summaryPlaceholder.hidden = true; els.summaryContent.hidden = false;
-    $('#summary-file').textContent = part.filename;
-    $('#summary-size').textContent = `${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm`;
-    $('#summary-material').textContent = `${quote.material.name} · ${quote.thickness} mm`;
-    $('#summary-quantity').textContent = quote.quantity;
-    $('#summary-cutting').textContent = currency.format(quote.cuttingMaterial);
-    $('#summary-setup').textContent = currency.format(quote.setup);
-    $('#summary-extras').textContent = currency.format(quote.extras);
-    $('#minimum-row').hidden = quote.minimumAdjustment <= 0;
-    $('#summary-minimum').textContent = currency.format(quote.minimumAdjustment);
-    $('#summary-subtotal').textContent = currency.format(quote.subtotal);
-    $('#summary-gst').textContent = currency.format(quote.gst);
-    $('#summary-total').textContent = currency.format(quote.total);
-    $('#review-flag').hidden = !quote.needsReview;
+    if (!state.parts.length) {
+      els.summaryPlaceholder.hidden = false;
+      els.summaryContent.hidden = true;
+      return;
+    }
+    const basket = basketCalculation();
+    els.summaryPlaceholder.hidden = true;
+    els.summaryContent.hidden = false;
+    $('#summary-material').textContent = `${basket.items[0].quote.material.name} · ${basket.items[0].quote.thickness} mm`;
+    $('#summary-count').textContent = `${state.parts.length} file${state.parts.length === 1 ? '' : 's'} · ${basket.totalQuantity} item${basket.totalQuantity === 1 ? '' : 's'}`;
+    renderQuoteItems(basket);
+    $('#summary-subtotal').textContent = currency.format(basket.subtotal);
+    $('#summary-gst').textContent = currency.format(basket.gst);
+    $('#summary-total').textContent = currency.format(basket.total);
+    $('#review-flag').hidden = !basket.needsReview;
     $$('.quote-steps li').forEach((step, index) => step.classList.toggle('active', index <= 1));
   }
 
@@ -294,26 +402,42 @@
     $('#stat-entities').textContent = part.entities.length;
     els.warning.hidden = part.warnings.length === 0;
     els.warning.textContent = part.warnings.join(' ');
-    renderPreview(part); updateSummary();
+    renderPreview(part);
+    updateSummary();
   }
 
   function renderTabs() {
     els.tabs.innerHTML = '';
     state.parts.forEach((part, index) => {
-      const button = document.createElement('button'); button.type = 'button'; button.className = `part-tab${index === state.activeIndex ? ' active' : ''}`;
-      button.textContent = part.filename; button.title = part.filename;
-      button.addEventListener('click', () => { state.activeIndex = index; renderTabs(); renderActivePart(); });
-      els.tabs.appendChild(button);
+      const tab = document.createElement('div');
+      tab.className = `part-tab-item${index === state.activeIndex ? ' active' : ''}`;
+      const select = document.createElement('button');
+      select.type = 'button'; select.className = 'part-tab'; select.textContent = part.filename; select.title = part.filename;
+      select.addEventListener('click', () => setActivePart(index));
+      const close = document.createElement('button');
+      close.type = 'button'; close.className = 'part-tab-close'; close.textContent = '×'; close.setAttribute('aria-label', `Remove ${part.filename}`);
+      close.addEventListener('click', () => removePart(index));
+      tab.append(select, close);
+      els.tabs.appendChild(tab);
     });
   }
 
   function showParts() {
-    els.partPanel.hidden = false; els.configPanel.hidden = false; renderTabs(); renderActivePart();
+    els.partPanel.hidden = false;
+    els.configPanel.hidden = false;
+    renderTabs();
+    renderActivePart();
     setTimeout(() => els.partPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   async function handleFiles(fileList) {
-    const files = [...fileList].slice(0, MAX_FILES);
+    const remainingSlots = Math.max(0, MAX_FILES - state.parts.length);
+    const files = [...fileList].slice(0, remainingSlots);
+    if (!remainingSlots) {
+      els.uploadMessage.className = 'upload-message error';
+      els.uploadMessage.textContent = `A maximum of ${MAX_FILES} drawings can be added to one quote.`;
+      return;
+    }
     if (!files.length) return;
     els.uploadMessage.className = 'upload-message'; els.uploadMessage.textContent = 'Reading drawing geometry…';
     const parsed = []; const errors = [];
@@ -323,10 +447,16 @@
       catch (error) { errors.push(`${file.name}: ${error.message}`); }
     }
     if (parsed.length) {
-      state.parts.push(...parsed); state.activeIndex = state.parts.length - parsed.length;
-      els.uploadMessage.className = 'upload-message success'; els.uploadMessage.textContent = `${parsed.length} drawing${parsed.length === 1 ? '' : 's'} read successfully.${errors.length ? ` ${errors.length} file(s) need attention.` : ''}`;
+      const firstNewIndex = state.parts.length;
+      state.parts.push(...parsed);
+      state.activeIndex = firstNewIndex;
+      els.uploadMessage.className = 'upload-message success';
+      els.uploadMessage.textContent = `${parsed.length} drawing${parsed.length === 1 ? '' : 's'} added.${errors.length ? ` ${errors.length} file(s) need attention.` : ''}`;
       showParts();
-    } else { els.uploadMessage.className = 'upload-message error'; els.uploadMessage.textContent = errors.join(' · ') || 'The selected file could not be read.'; }
+    } else {
+      els.uploadMessage.className = 'upload-message error';
+      els.uploadMessage.textContent = errors.join(' · ') || 'The selected file could not be read.';
+    }
   }
 
   async function loadSample() {
@@ -334,18 +464,34 @@
       const response = await fetch('assets/samples/sample-bracket.dxf');
       if (!response.ok) throw new Error('Sample file unavailable');
       const part = parseDXF(await response.text(), 'sample-bracket.dxf');
-      state.parts = [part]; state.activeIndex = 0;
-      els.uploadMessage.className = 'upload-message success'; els.uploadMessage.textContent = 'Sample bracket loaded. Change the options to test the quote.';
+      state.parts.push(part); state.activeIndex = state.parts.length - 1;
+      els.uploadMessage.className = 'upload-message success'; els.uploadMessage.textContent = 'Sample bracket added. Change the material, thickness or quantity to test the quote.';
       showParts();
     } catch (error) {
       const builtIn = `0\nSECTION\n2\nENTITIES\n0\nLWPOLYLINE\n90\n4\n70\n1\n10\n0\n20\n0\n10\n180\n20\n0\n10\n180\n20\n100\n10\n0\n20\n100\n0\nCIRCLE\n10\n25\n20\n50\n40\n8\n0\nCIRCLE\n10\n155\n20\n50\n40\n8\n0\nENDSEC\n0\nEOF`;
-      state.parts = [parseDXF(builtIn, 'sample-bracket.dxf')]; state.activeIndex = 0; showParts();
+      state.parts.push(parseDXF(builtIn, 'sample-bracket.dxf')); state.activeIndex = state.parts.length - 1; showParts();
     }
   }
 
   function quoteSnapshot() {
-    const part = currentPart(); const quote = quoteCalculation(); if (!part || !quote) return null;
-    return { id: Date.now(), createdAt: new Date().toISOString(), filename: part.filename, width: part.width, height: part.height, cutLength: part.cutLength, materialKey: quote.materialKey, materialName: quote.material.name, thickness: quote.thickness, quantity: quote.quantity, extras: quote.checked, notes: els.notes.value.trim(), subtotal: quote.subtotal, gst: quote.gst, total: quote.total, needsReview: quote.needsReview };
+    if (!state.parts.length) return null;
+    const basket = basketCalculation();
+    const firstQuote = basket.items[0].quote;
+    return {
+      id: Date.now(),
+      createdAt: new Date().toISOString(),
+      materialKey: firstQuote.materialKey,
+      materialName: firstQuote.material.name,
+      thickness: firstQuote.thickness,
+      leadTime: els.leadTime.value,
+      notes: els.notes.value.trim(),
+      parts: basket.items.map(({ part, quote }) => ({ filename: part.filename, width: part.width, height: part.height, cutLength: part.cutLength, quantity: quote.quantity, subtotal: quote.subtotal, needsReview: quote.needsReview })),
+      totalQuantity: basket.totalQuantity,
+      subtotal: basket.subtotal,
+      gst: basket.gst,
+      total: basket.total,
+      needsReview: basket.needsReview
+    };
   }
 
   function readDrafts() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } }
@@ -357,7 +503,10 @@
     els.savedList.innerHTML = '';
     drafts.forEach(draft => {
       const item = document.createElement('article'); item.className = 'saved-quote-item';
-      item.innerHTML = `<div><strong>${escapeHTML(draft.filename)}</strong><small>${draft.materialName} · ${draft.thickness} mm · Qty ${draft.quantity} · ${currency.format(draft.total)}</small></div><button type="button" class="email">Email</button><button type="button" class="delete">Delete</button>`;
+      const fileCount = draft.parts?.length || 1;
+      const title = draft.parts?.[0]?.filename || draft.filename || 'Saved quote';
+      const extraFiles = fileCount > 1 ? ` + ${fileCount - 1} more` : '';
+      item.innerHTML = `<div><strong>${escapeHTML(title)}${escapeHTML(extraFiles)}</strong><small>${escapeHTML(draft.materialName)} · ${draft.thickness} mm · ${draft.totalQuantity || draft.quantity || 1} items · ${currency.format(draft.total)}</small></div><button type="button" class="email">Email</button><button type="button" class="delete">Delete</button>`;
       item.querySelector('.email').addEventListener('click', () => emailDraft(draft));
       item.querySelector('.delete').addEventListener('click', () => writeDrafts(readDrafts().filter(saved => saved.id !== draft.id)));
       els.savedList.appendChild(item);
@@ -374,9 +523,23 @@
   }
 
   function emailDraft(draft) {
-    const extras = draft.extras.length ? draft.extras.join(', ') : 'None';
-    const body = `Corten Living Instant Quote\n\nDrawing: ${draft.filename}\nSize: ${draft.width.toFixed(1)} x ${draft.height.toFixed(1)} mm\nMaterial: ${draft.materialName}, ${draft.thickness} mm\nQuantity: ${draft.quantity}\nExtras: ${extras}\nEstimated subtotal: ${currency.format(draft.subtotal)}\nGST: ${currency.format(draft.gst)}\nEstimated total: ${currency.format(draft.total)}\nManual review: ${draft.needsReview ? 'Required' : 'Not currently flagged'}\n\nNotes: ${draft.notes || 'None'}\n\nPlease confirm manufacturability, final pricing, freight and lead time.`;
-    location.href = `mailto:cortenliving@gmail.com?subject=${encodeURIComponent(`Instant Quote — ${draft.filename}`)}&body=${encodeURIComponent(body)}`;
+    const parts = draft.parts || [{ filename: draft.filename, width: draft.width, height: draft.height, quantity: draft.quantity, subtotal: draft.subtotal }];
+    const partLines = parts.map((part, index) => `${index + 1}. ${part.filename}\n   Size: ${Number(part.width).toFixed(1)} x ${Number(part.height).toFixed(1)} mm\n   Quantity: ${part.quantity}\n   Line price ex GST: ${currency.format(part.subtotal)}`).join('\n\n');
+    const body = `Corten Living Instant Quote\n\nMaterial: ${draft.materialName}, ${draft.thickness} mm\nLead time: ${draft.leadTime === 'priority' ? 'Priority' : 'Standard'}\n\nParts:\n${partLines}\n\nEstimated subtotal: ${currency.format(draft.subtotal)}\nGST: ${currency.format(draft.gst)}\nEstimated total: ${currency.format(draft.total)}\nManual review: ${draft.needsReview ? 'Required' : 'Not currently flagged'}\n\nNotes: ${draft.notes || 'None'}\n\nPlease confirm manufacturability, final pricing, freight and lead time.`;
+    const subjectPart = parts.length === 1 ? parts[0].filename : `${parts.length} DXF files`;
+    location.href = `mailto:cortenliving@gmail.com?subject=${encodeURIComponent(`Instant Quote — ${subjectPart}`)}&body=${encodeURIComponent(body)}`;
+  }
+
+  function resetQuoteWorkspace() {
+    state.parts = [];
+    state.activeIndex = 0;
+    els.partPanel.hidden = true;
+    els.configPanel.hidden = true;
+    els.summaryContent.hidden = true;
+    els.summaryPlaceholder.hidden = false;
+    els.quoteItemList.replaceChildren();
+    els.uploadMessage.textContent = '';
+    $$('.quote-steps li').forEach((step, index) => step.classList.toggle('active', index === 0));
   }
 
   els.input.addEventListener('change', event => { handleFiles(event.target.files); event.target.value = ''; });
@@ -384,10 +547,9 @@
   ['dragleave', 'drop'].forEach(type => els.dropZone.addEventListener(type, event => { event.preventDefault(); els.dropZone.classList.remove('dragover'); }));
   els.dropZone.addEventListener('drop', event => handleFiles(event.dataTransfer.files));
   els.loadSample.addEventListener('click', loadSample);
-  els.clear.addEventListener('click', () => { state.parts = []; state.activeIndex = 0; els.partPanel.hidden = true; els.configPanel.hidden = true; els.summaryContent.hidden = true; els.summaryPlaceholder.hidden = false; els.uploadMessage.textContent = ''; $$('.quote-steps li').forEach((step, index) => step.classList.toggle('active', index === 0)); });
+  els.clear.addEventListener('click', resetQuoteWorkspace);
   els.material.addEventListener('change', () => { populateThicknesses(); updateSummary(); });
-  [els.thickness, els.quantity, els.leadTime, els.notes].forEach(input => input.addEventListener('input', updateSummary));
-  $$('[data-process]').forEach(input => input.addEventListener('change', updateSummary));
+  [els.thickness, els.leadTime, els.notes].forEach(input => input.addEventListener('input', updateSummary));
   els.saveQuote.addEventListener('click', saveDraft);
   els.emailQuote.addEventListener('click', () => { const snapshot = quoteSnapshot(); if (snapshot) emailDraft(snapshot); });
 
