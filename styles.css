@@ -8,3 +8,12 @@
 .quote-banner{background:#242626;color:#fff;border-top:1px solid #363838;border-bottom:1px solid #363838}.quote-banner-inner{display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:center;padding:20px 0}.quote-banner-icon{width:52px;height:52px;border:1px solid var(--rust);color:var(--rust);display:grid;place-items:center;font-size:25px}.quote-banner h2{font:600 25px "Barlow Condensed",sans-serif;text-transform:uppercase;margin:0}.quote-banner p{margin:2px 0 0;color:#bbb;font-size:12px}.quote-banner .button{white-space:nowrap}
 @media(max-width:900px){.quote-banner-inner{grid-template-columns:auto 1fr}.quote-banner .button{grid-column:1/-1;justify-self:start}}
 @media(max-width:620px){.quote-banner-inner{grid-template-columns:1fr}.quote-banner-icon{display:none}}
+
+/* logo override */
+.wordmark{display:inline-flex;flex-direction:row;align-items:center;width:max-content;line-height:1;letter-spacing:0}
+.site-logo{display:block;height:68px;width:auto;max-width:100%}
+.footer-logo .site-logo{height:96px}
+@media(max-width:760px){
+  .site-logo{height:52px}
+  .footer-logo .site-logo{height:76px}
+}
