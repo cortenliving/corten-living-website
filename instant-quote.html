@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Upload a DXF and create an instant laser-cutting estimate with Corten Living.">
+  <title>Instant Quote | Corten Living</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="instant-quote.css">
+  <script defer src="script.js"></script>
+  <script defer src="instant-quote.js"></script>
+</head>
+<body class="quote-page">
+  <header class="site-header">
+    <a class="wordmark" href="index.html" aria-label="Corten Living home"><span>CORTEN</span><small>LIVING</small></a>
+    <button class="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="index.html">Home</a>
+      <a href="shop.html">Shop</a>
+      <a class="active quote-nav-link" href="instant-quote.html">Instant Quote</a>
+      <a href="custom-work.html">Custom Work</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <a class="shop-icon" href="shop.html" aria-label="View shop">▢</a>
+  </header>
+
+  <main>
+    <section class="quote-hero">
+      <div class="container quote-hero-inner">
+        <div>
+          <p class="eyebrow rust">Corten Living dashboard</p>
+          <h1>Instant Quote</h1>
+          <p>Upload a 2D DXF, check the geometry, choose material and quantity, then get an immediate budget estimate.</p>
+        </div>
+        <div class="quote-status"><span></span> Prototype pricing engine live</div>
+      </div>
+    </section>
+
+    <section class="quote-workspace">
+      <div class="container quote-layout">
+        <div class="quote-main">
+          <ol class="quote-steps" aria-label="Quote progress">
+            <li class="active"><span>1</span>Upload</li>
+            <li><span>2</span>Configure</li>
+            <li><span>3</span>Review</li>
+          </ol>
+
+          <section class="quote-panel upload-panel" aria-labelledby="upload-title">
+            <div class="panel-heading">
+              <div><p class="panel-kicker">Step 1</p><h2 id="upload-title">Upload your DXF</h2></div>
+              <button class="text-button" id="load-sample" type="button">Try sample part</button>
+            </div>
+            <label class="drop-zone" id="drop-zone" for="dxf-input">
+              <input id="dxf-input" type="file" accept=".dxf,text/plain" multiple hidden>
+              <span class="upload-mark" aria-hidden="true">↑</span>
+              <strong>Drop DXF files here</strong>
+              <span>or click to browse from your computer</span>
+              <small>2D ASCII DXF · maximum 10 files · drawings should be in millimetres</small>
+            </label>
+            <div class="upload-message" id="upload-message" role="status"></div>
+          </section>
+
+          <section class="quote-panel part-panel" id="part-panel" aria-labelledby="part-title" hidden>
+            <div class="panel-heading">
+              <div><p class="panel-kicker">Geometry check</p><h2 id="part-title">Your part</h2></div>
+              <button class="text-button danger" id="clear-parts" type="button">Clear</button>
+            </div>
+            <div class="part-tabs" id="part-tabs" role="tablist"></div>
+            <div class="part-detail-grid">
+              <div class="drawing-preview">
+                <div class="preview-toolbar"><span id="preview-filename">DXF preview</span><span>Not for production</span></div>
+                <svg id="dxf-preview" viewBox="0 0 720 440" role="img" aria-label="Uploaded DXF geometry preview"></svg>
+              </div>
+              <dl class="geometry-stats">
+                <div><dt>Width</dt><dd id="stat-width">—</dd></div>
+                <div><dt>Height</dt><dd id="stat-height">—</dd></div>
+                <div><dt>Cut length</dt><dd id="stat-cut-length">—</dd></div>
+                <div><dt>Estimated pierces</dt><dd id="stat-pierces">—</dd></div>
+                <div><dt>Entities read</dt><dd id="stat-entities">—</dd></div>
+                <div><dt>Drawing units</dt><dd>mm</dd></div>
+              </dl>
+            </div>
+            <div class="geometry-warning" id="geometry-warning" hidden></div>
+          </section>
+
+          <section class="quote-panel configuration-panel" id="configuration-panel" aria-labelledby="configuration-title" hidden>
+            <div class="panel-heading"><div><p class="panel-kicker">Step 2</p><h2 id="configuration-title">Configure the job</h2></div></div>
+            <div class="form-grid">
+              <label><span>Material</span><select id="material-select"><option value="corten">Corten steel</option><option value="mild">Mild steel</option><option value="stainless">Stainless steel</option><option value="aluminium">Aluminium</option></select></label>
+              <label><span>Thickness</span><select id="thickness-select"></select></label>
+              <label><span>Quantity</span><input id="quantity-input" type="number" min="1" max="999" step="1" value="1"></label>
+              <label><span>Required by</span><select id="lead-time-select"><option value="standard">Standard · 7–10 working days</option><option value="priority">Priority · 3–5 working days</option></select></label>
+            </div>
+            <fieldset class="process-options">
+              <legend>Additional processes</legend>
+              <label><input type="checkbox" data-process="deburr"><span><strong>Deburr edges</strong><small>Remove sharp edges after cutting</small></span><b>+$8.00</b></label>
+              <label><input type="checkbox" data-process="engrave"><span><strong>Laser marking</strong><small>Basic line marking or part identification</small></span><b>+$12.00</b></label>
+              <label><input type="checkbox" data-process="fold"><span><strong>Folding required</strong><small>Flags the quote for manual review</small></span><b>Review</b></label>
+            </fieldset>
+            <label class="notes-field"><span>Job notes <em>optional</em></span><textarea id="job-notes" placeholder="Finish, tolerances, folding details, delivery notes or anything else we should know"></textarea></label>
+          </section>
+
+          <section class="saved-quotes quote-panel" aria-labelledby="saved-title">
+            <div class="panel-heading"><div><p class="panel-kicker">This device</p><h2 id="saved-title">Saved quote drafts</h2></div></div>
+            <div id="saved-quote-list" class="saved-quote-list"><p class="empty-state">No saved drafts yet.</p></div>
+          </section>
+        </div>
+
+        <aside class="quote-summary" aria-labelledby="summary-title">
+          <div class="summary-top"><p class="panel-kicker">Live estimate</p><h2 id="summary-title">Quote summary</h2></div>
+          <div class="summary-placeholder" id="summary-placeholder"><span>⌁</span><p>Upload a DXF to calculate a price.</p></div>
+          <div id="summary-content" hidden>
+            <div class="summary-part"><strong id="summary-file">Part.dxf</strong><span id="summary-size">— × — mm</span></div>
+            <dl class="summary-lines">
+              <div><dt>Material</dt><dd id="summary-material">—</dd></div>
+              <div><dt>Quantity</dt><dd id="summary-quantity">1</dd></div>
+              <div><dt>Material &amp; cutting</dt><dd id="summary-cutting">$0.00</dd></div>
+              <div><dt>Setup</dt><dd id="summary-setup">$0.00</dd></div>
+              <div><dt>Extras</dt><dd id="summary-extras">$0.00</dd></div>
+              <div class="summary-minimum" id="minimum-row" hidden><dt>Minimum charge adjustment</dt><dd id="summary-minimum">$0.00</dd></div>
+            </dl>
+            <div class="summary-subtotal"><span>Subtotal</span><strong id="summary-subtotal">$0.00</strong></div>
+            <div class="summary-gst"><span>GST (15%)</span><span id="summary-gst">$0.00</span></div>
+            <div class="summary-total"><span>Estimated total</span><strong id="summary-total">$0.00</strong></div>
+            <p class="review-flag" id="review-flag" hidden>Manual review is required before this price can be confirmed.</p>
+            <button class="button button-primary summary-button" id="save-quote" type="button">Save Quote Draft</button>
+            <button class="button summary-button email-button" id="email-quote" type="button">Email Quote Details</button>
+            <button class="button summary-button disabled-button" type="button" disabled>Checkout · coming next</button>
+            <p class="estimate-note">Budget estimate only. Final pricing depends on DXF quality, material availability, tolerances, manufacturability and delivery. No file is uploaded to a server in this prototype.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom"><span>© <span class="current-year"></span> Corten Living.</span><span>Instant Quote prototype · Gisborne, New Zealand</span></div>
+  </footer>
+</body>
+</html>
