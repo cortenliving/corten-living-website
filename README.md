@@ -51,7 +51,3 @@ Cloudflare Pages should deploy the update automatically.
 - The production version should move the settings into a protected Cloudflare D1 database with admin authentication.
 - Uploaded DXF drawings still remain in the customer’s browser and are not stored online.
 - Every displayed price remains a budget estimate until manufacturability and final pricing are confirmed.
-
-
-## Logo update
-The website header and footer now use `corten-living-logo.png`, a transparent-background version of the approved Corten Living logo.

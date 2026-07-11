@@ -522,7 +522,7 @@
 
   async function loadSample() {
     try {
-      const response = await fetch('sample-bracket.dxf');
+      const response = await fetch('assets/samples/sample-bracket.dxf');
       if (!response.ok) throw new Error('Sample file unavailable');
       const part = parseDXF(await response.text(), 'sample-bracket.dxf');
       state.parts.push(part); state.activeIndex = state.parts.length - 1;
