@@ -54,4 +54,4 @@ Cloudflare Pages should deploy the update automatically.
 
 
 ## Logo update
-The website header and footer now use `assets/images/corten-living-logo.png`, a transparent-background version of the approved Corten Living logo.
+The website header and footer now use `corten-living-logo.png`, a transparent-background version of the approved Corten Living logo.

@@ -1,0 +1,10 @@
+CORTEN LIVING ASSET FIX
+
+1. Open the corten-living-website repository on GitHub.
+2. Click Add file > Upload files.
+3. Open this extracted folder and select EVERY file inside it.
+4. Drag all selected files onto GitHub.
+5. Commit with: Fix logo and website images
+
+All images are deliberately stored at the repository top level in this update.
+This avoids the missing assets/images folder problem from the previous upload.
