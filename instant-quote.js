@@ -5,24 +5,13 @@
   const $$ = selector => [...document.querySelectorAll(selector)];
   const currency = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' });
   const MAX_FILES = 10;
-  const SHEET_WIDTH_MM = 1200;
-  const SHEET_LENGTH_MM = 2400;
   const STORAGE_KEY = 'cortenLivingInstantQuoteDraftsV2';
-
-  const MATERIALS = {
-    corten: { name: 'Corten steel', density: 7850, sheetRate: 7.9, thicknesses: [1.6, 2, 3, 4, 5, 6], cutFactor: 1.08 },
-    mild: { name: 'Mild steel', density: 7850, sheetRate: 5.7, thicknesses: [1, 1.6, 2, 3, 4, 5, 6, 8, 10], cutFactor: 1 },
-    stainless: { name: 'Stainless steel', density: 8000, sheetRate: 14.5, thicknesses: [1, 1.5, 2, 3, 4, 5, 6], cutFactor: 1.35 },
-    aluminium: { name: 'Aluminium', density: 2700, sheetRate: 12.2, thicknesses: [1.6, 2, 3, 4, 5, 6], cutFactor: 1.18 }
-  };
-
-  const PRICING = {
-    machineRatePerMinute: 2.15,
-    piercePrice: 0.42,
-    materialWasteFactor: 1.22,
-    gst: 0.15,
-    priorityMultiplier: 1.2
-  };
+  const config = window.CortenPricingConfig;
+  if (!config) {
+    console.error('Pricing configuration could not be loaded.');
+    return;
+  }
+  let settings = config.load();
 
   const state = { parts: [], activeIndex: 0 };
 
@@ -84,7 +73,17 @@
   function fitsStandardSheet(width, height) {
     const shortSide = Math.min(width, height);
     const longSide = Math.max(width, height);
-    return shortSide <= SHEET_WIDTH_MM && longSide <= SHEET_LENGTH_MM;
+    const sheetShort = Math.min(settings.sheet.widthMm, settings.sheet.lengthMm);
+    const sheetLong = Math.max(settings.sheet.widthMm, settings.sheet.lengthMm);
+    return shortSide <= sheetShort && longSide <= sheetLong;
+  }
+
+  function sheetSizeLabel() {
+    return `${settings.sheet.widthMm} × ${settings.sheet.lengthMm} mm`;
+  }
+
+  function refreshSheetErrors() {
+    state.parts.forEach(part => { part.sheetError = !fitsStandardSheet(part.width, part.height); });
   }
 
   function parseDXF(text, filename) {
@@ -241,9 +240,38 @@
     renderPartSvg(els.preview, part, 720, 440, 34);
   }
 
+  function enabledMaterials() {
+    return settings.materials.filter(material => material.enabled && material.thicknesses.length);
+  }
+
+  function selectedMaterial() {
+    return enabledMaterials().find(material => material.id === els.material.value) || enabledMaterials()[0] || null;
+  }
+
+  function populateMaterials(preferredMaterialId) {
+    const available = enabledMaterials();
+    const previous = preferredMaterialId || els.material.value;
+    els.material.innerHTML = available.map(material => `<option value="${material.id}">${escapeHTML(material.name)}</option>`).join('');
+    if (available.some(material => material.id === previous)) els.material.value = previous;
+    if (!available.length) {
+      els.material.innerHTML = '<option value="">No materials enabled</option>';
+      els.material.disabled = true;
+      els.thickness.innerHTML = '<option value="">No thicknesses available</option>';
+      els.thickness.disabled = true;
+      els.uploadMessage.className = 'upload-message error';
+      els.uploadMessage.textContent = 'No materials are enabled. Open Pricing Settings and enable at least one material.';
+      return;
+    }
+    els.material.disabled = false;
+    els.thickness.disabled = false;
+  }
+
   function populateThicknesses(preferred = 3) {
-    const material = MATERIALS[els.material.value];
-    els.thickness.innerHTML = material.thicknesses.map(value => `<option value="${value}" ${value === preferred ? 'selected' : ''}>${value} mm</option>`).join('');
+    const material = selectedMaterial();
+    if (!material) return;
+    els.thickness.innerHTML = material.thicknesses.map(value => `<option value="${value}">${value} mm</option>`).join('');
+    const closest = material.thicknesses.includes(Number(preferred)) ? Number(preferred) : material.thicknesses[0];
+    els.thickness.value = String(closest);
   }
 
   function currentPart() { return state.parts[state.activeIndex] || null; }
@@ -255,20 +283,22 @@
   function quoteCalculation(part) {
     if (!part) return null;
     const materialKey = els.material.value;
-    const material = MATERIALS[materialKey];
-    const thickness = Number.parseFloat(els.thickness.value) || 3;
+    const material = selectedMaterial();
+    if (!material) return null;
+    const thickness = Number.parseFloat(els.thickness.value) || material.thicknesses[0] || 3;
+    const pricing = settings.pricing;
     const quantity = normaliseQuantity(part.quantity);
     part.quantity = quantity;
     const areaM2 = Math.max(part.width * part.height / 1_000_000, 0.0001);
     const massKgEach = areaM2 * thickness / 1000 * material.density;
-    const materialEach = massKgEach * material.sheetRate * PRICING.materialWasteFactor;
-    const speedMmPerMinute = Math.max(260, 3800 / Math.pow(thickness, 0.72) / material.cutFactor);
-    const cuttingMinutesEach = part.cutLength / speedMmPerMinute + part.pierces * 0.055;
-    const cuttingEach = cuttingMinutesEach * PRICING.machineRatePerMinute + part.pierces * PRICING.piercePrice;
-    const quantityEfficiency = quantity >= 20 ? 0.85 : quantity >= 10 ? 0.9 : quantity >= 5 ? 0.95 : 1;
-    let subtotal = (materialEach + cuttingEach) * quantity * quantityEfficiency;
-    if (els.leadTime.value === 'priority') subtotal *= PRICING.priorityMultiplier;
-    const gst = subtotal * PRICING.gst;
+    const materialEach = massKgEach * material.pricePerKg * (1 + pricing.materialWastePercent / 100);
+    const speedMmPerMinute = Math.max(pricing.minimumCutSpeedMmPerMinute, pricing.baseCutSpeedMmPerMinute / Math.pow(thickness, 0.72) / material.cutFactor);
+    const cuttingMinutesEach = part.cutLength / speedMmPerMinute + part.pierces * (pricing.pierceTimeSeconds / 60);
+    const cuttingEach = cuttingMinutesEach * (pricing.machineRatePerHour / 60) + part.pierces * pricing.piercePrice;
+    const quantityEfficiency = config.quantityMultiplier(quantity, pricing);
+    let subtotal = (materialEach + cuttingEach) * (1 + pricing.markupPercent / 100) * quantity * quantityEfficiency;
+    if (els.leadTime.value === 'priority') subtotal *= pricing.priorityMultiplier;
+    const gst = subtotal * (pricing.gstPercent / 100);
     const sheetError = Boolean(part.sheetError);
     const needsReview = part.warnings.length > 0 || sheetError;
     return { partId: part.id, materialKey, material, thickness, quantity, areaM2, massKgEach, materialEach, cuttingMinutesEach, subtotal, gst, total: subtotal + gst, needsReview, sheetError };
@@ -277,7 +307,7 @@
   function basketCalculation() {
     const items = state.parts.map(part => ({ part, quote: quoteCalculation(part) }));
     const subtotal = items.reduce((sum, item) => sum + item.quote.subtotal, 0);
-    const gst = subtotal * PRICING.gst;
+    const gst = subtotal * (settings.pricing.gstPercent / 100);
     return {
       items,
       subtotal,
@@ -412,7 +442,7 @@
     $('#summary-total').textContent = basket.hasSheetError ? 'Cannot quote' : currency.format(basket.total);
     $('#review-flag').hidden = !basket.needsReview;
     $('#review-flag').textContent = basket.hasSheetError
-      ? 'One or more parts will not fit a standard 1200 × 2400 mm sheet, even when rotated. Remove or resize the highlighted file before an instant price can be calculated.'
+      ? `One or more parts will not fit the configured ${sheetSizeLabel()} sheet, even when rotated. Remove or resize the highlighted file before an instant price can be calculated.`
       : 'Manual review is required before this price can be confirmed.';
     $$('.quote-steps li').forEach((step, index) => step.classList.toggle('active', index <= 1));
   }
@@ -426,7 +456,7 @@
     $('#stat-pierces').textContent = part.pierces;
     $('#stat-entities').textContent = part.entities.length;
     const messages = [...part.warnings];
-    if (part.sheetError) messages.unshift(`ERROR: This part is ${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm and will not fit a standard ${SHEET_WIDTH_MM} × ${SHEET_LENGTH_MM} mm sheet, even when rotated.`);
+    if (part.sheetError) messages.unshift(`ERROR: This part is ${part.width.toFixed(1)} × ${part.height.toFixed(1)} mm and will not fit the configured ${sheetSizeLabel()} sheet, even when rotated.`);
     els.warning.hidden = messages.length === 0;
     els.warning.textContent = messages.join(' ');
     els.warning.classList.toggle('error', Boolean(part.sheetError));
@@ -556,7 +586,7 @@
 
   function emailDraft(draft) {
     const parts = draft.parts || [{ filename: draft.filename, width: draft.width, height: draft.height, quantity: draft.quantity, subtotal: draft.subtotal }];
-    const partLines = parts.map((part, index) => `${index + 1}. ${part.filename}\n   Size: ${Number(part.width).toFixed(1)} x ${Number(part.height).toFixed(1)} mm\n   Quantity: ${part.quantity}\n   Sheet fit: ${part.sheetError ? 'ERROR - exceeds 1200 x 2400 mm sheet' : 'Fits standard sheet'}\n   Line price ex GST: ${part.sheetError ? 'Not calculated' : currency.format(part.subtotal)}`).join('\n\n');
+    const partLines = parts.map((part, index) => `${index + 1}. ${part.filename}\n   Size: ${Number(part.width).toFixed(1)} x ${Number(part.height).toFixed(1)} mm\n   Quantity: ${part.quantity}\n   Sheet fit: ${part.sheetError ? `ERROR - exceeds ${settings.sheet.widthMm} x ${settings.sheet.lengthMm} mm sheet` : 'Fits standard sheet'}\n   Line price ex GST: ${part.sheetError ? 'Not calculated' : currency.format(part.subtotal)}`).join('\n\n');
     const body = `Corten Living Instant Quote\n\nMaterial: ${draft.materialName}, ${draft.thickness} mm\nLead time: ${draft.leadTime === 'priority' ? 'Priority' : 'Standard'}\n\nParts:\n${partLines}\n\nEstimated subtotal: ${draft.hasSheetError ? 'Not calculated' : currency.format(draft.subtotal)}\nGST: ${draft.hasSheetError ? 'Not calculated' : currency.format(draft.gst)}\nEstimated total: ${draft.hasSheetError ? 'Cannot quote - oversized part' : currency.format(draft.total)}\nManual review: ${draft.needsReview ? 'Required' : 'Not currently flagged'}\n\nNotes: ${draft.notes || 'None'}\n\nPlease confirm manufacturability, final pricing, freight and lead time.`;
     const subjectPart = parts.length === 1 ? parts[0].filename : `${parts.length} DXF files`;
     location.href = `mailto:cortenliving@gmail.com?subject=${encodeURIComponent(`Instant Quote — ${subjectPart}`)}&body=${encodeURIComponent(body)}`;
@@ -582,8 +612,28 @@
   els.clear.addEventListener('click', resetQuoteWorkspace);
   els.material.addEventListener('change', () => { populateThicknesses(); updateSummary(); });
   [els.thickness, els.leadTime, els.notes].forEach(input => input.addEventListener('input', updateSummary));
+
+  window.addEventListener('storage', event => {
+    if (event.key !== config.STORAGE_KEY) return;
+    const materialId = els.material.value;
+    const thickness = Number.parseFloat(els.thickness.value) || 3;
+    settings = config.load();
+    populateMaterials(materialId);
+    populateThicknesses(thickness);
+    refreshSheetErrors();
+    if (state.parts.length) { renderTabs(); renderActivePart(); }
+    updateSheetLimitText();
+  });
   els.saveQuote.addEventListener('click', saveDraft);
   els.emailQuote.addEventListener('click', () => { const snapshot = quoteSnapshot(); if (snapshot) emailDraft(snapshot); });
 
-  populateThicknesses(3); renderSavedDrafts();
+  function updateSheetLimitText() {
+    const node = document.querySelector('#sheet-limit-text');
+    if (node) node.textContent = `maximum sheet ${sheetSizeLabel()}`;
+  }
+
+  populateMaterials('corten');
+  populateThicknesses(3);
+  updateSheetLimitText();
+  renderSavedDrafts();
 })();

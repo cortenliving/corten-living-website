@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="instant-quote.css">
   <script defer src="script.js"></script>
+  <script defer src="pricing-config.js"></script>
   <script defer src="instant-quote.js"></script>
 </head>
 <body class="quote-page">
@@ -21,6 +22,7 @@
       <a href="index.html">Home</a>
       <a href="shop.html">Shop</a>
       <a class="active quote-nav-link" href="instant-quote.html">Instant Quote</a>
+      <a href="pricing-settings.html">Pricing Settings</a>
       <a href="custom-work.html">Custom Work</a>
       <a href="about.html">About</a>
       <a href="contact.html">Contact</a>
@@ -36,7 +38,7 @@
           <h1>Instant Quote</h1>
           <p>Upload 2D DXF files, check each part, set an individual quantity, then get an immediate budget estimate.</p>
         </div>
-        <div class="quote-status"><span></span> Prototype pricing engine live</div>
+        <div class="quote-status"><span></span> Editable pricing engine live</div>
       </div>
     </section>
 
@@ -59,7 +61,7 @@
               <span class="upload-mark" aria-hidden="true">↑</span>
               <strong>Drop DXF files here</strong>
               <span>or click to browse from your computer</span>
-              <small>2D ASCII DXF · maximum 10 files · drawings in millimetres · maximum sheet 1200 × 2400 mm</small>
+              <small>2D ASCII DXF · maximum 10 files · drawings in millimetres · <span id="sheet-limit-text">maximum sheet 1200 × 2400 mm</span></small>
             </label>
             <div class="upload-message" id="upload-message" role="status"></div>
           </section>
@@ -89,9 +91,9 @@
           </section>
 
           <section class="quote-panel configuration-panel" id="configuration-panel" aria-labelledby="configuration-title" hidden>
-            <div class="panel-heading"><div><p class="panel-kicker">Step 2</p><h2 id="configuration-title">Configure the job</h2></div></div>
+            <div class="panel-heading"><div><p class="panel-kicker">Step 2</p><h2 id="configuration-title">Configure the job</h2></div><a class="text-button settings-link" href="pricing-settings.html">Edit pricing settings →</a></div>
             <div class="form-grid">
-              <label><span>Material</span><select id="material-select"><option value="corten">Corten steel</option><option value="mild">Mild steel</option><option value="stainless">Stainless steel</option><option value="aluminium">Aluminium</option></select></label>
+              <label><span>Material</span><select id="material-select"></select></label>
               <label><span>Thickness</span><select id="thickness-select"></select></label>
               <label><span>Required by</span><select id="lead-time-select"><option value="standard">Standard · 7–10 working days</option><option value="priority">Priority · 3–5 working days</option></select></label>
             </div>
@@ -120,7 +122,7 @@
             <button class="button button-primary summary-button" id="save-quote" type="button">Save Quote Draft</button>
             <button class="button summary-button email-button" id="email-quote" type="button">Email Quote Details</button>
             <button class="button summary-button disabled-button" type="button" disabled>Checkout · coming next</button>
-            <p class="estimate-note">Budget estimate only. Final pricing depends on DXF quality, material availability, tolerances, manufacturability and delivery. No file is uploaded to a server in this prototype.</p>
+            <p class="estimate-note">Budget estimate only. Pricing comes from this browser’s Pricing Settings. Final pricing depends on DXF quality, material availability, tolerances, manufacturability and delivery. No file is uploaded to a server in this prototype.</p>
           </div>
         </aside>
       </div>

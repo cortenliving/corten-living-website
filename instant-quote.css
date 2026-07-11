@@ -57,3 +57,4 @@
 .sheet-error-label{color:#ff8b80!important;font-weight:700;text-transform:uppercase}
 .quote-item-price.error strong{font-size:14px;color:#ff7569;text-align:right}
 .quote-item-price.error small{color:#ff9d95}
+.settings-link{color:#a64821;text-decoration:none;white-space:nowrap}.settings-link:hover{text-decoration:underline}.drop-zone small span{display:inline}@media(max-width:620px){.settings-link{white-space:normal}}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Manage Corten Living Instant Quote materials, thicknesses and pricing parameters.">
+  <title>Pricing Settings | Corten Living</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="pricing-settings.css">
+  <script defer src="script.js"></script>
+  <script defer src="pricing-config.js"></script>
+  <script defer src="pricing-settings.js"></script>
+</head>
+<body class="settings-page">
+  <header class="site-header">
+    <a class="wordmark" href="index.html" aria-label="Corten Living home"><span>CORTEN</span><small>LIVING</small></a>
+    <button class="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="index.html">Home</a>
+      <a href="shop.html">Shop</a>
+      <a href="instant-quote.html">Instant Quote</a>
+      <a class="active quote-nav-link" href="pricing-settings.html">Pricing Settings</a>
+      <a href="custom-work.html">Custom Work</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <a class="shop-icon" href="instant-quote.html" aria-label="Return to Instant Quote">←</a>
+  </header>
+
+  <main>
+    <section class="settings-hero">
+      <div class="container settings-hero-inner">
+        <div>
+          <p class="eyebrow rust">Corten Living dashboard</p>
+          <h1>Pricing Settings</h1>
+          <p>Edit the materials, available thicknesses, sheet limits and calculation parameters used by Instant Quote.</p>
+        </div>
+        <a class="button button-primary" href="instant-quote.html">Open Instant Quote</a>
+      </div>
+    </section>
+
+    <section class="settings-workspace">
+      <div class="container settings-shell">
+        <div class="local-warning">
+          <strong>Prototype storage</strong>
+          <span>These settings are saved only in this browser on this computer. This page is not password protected yet, so do not treat it as the final production admin system.</span>
+        </div>
+
+        <form id="pricing-form" novalidate>
+          <section class="settings-card">
+            <div class="card-heading">
+              <div><p class="panel-kicker">Sheet validation</p><h2>Standard sheet size</h2></div>
+              <p>Parts can rotate to fit.</p>
+            </div>
+            <div class="settings-grid two-column">
+              <label><span>Maximum sheet width <em>mm</em></span><input id="sheet-width" type="number" min="1" step="1" required></label>
+              <label><span>Maximum sheet length <em>mm</em></span><input id="sheet-length" type="number" min="1" step="1" required></label>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="card-heading">
+              <div><p class="panel-kicker">Quote engine</p><h2>Pricing parameters</h2></div>
+              <p>No setup fee or minimum charge is applied.</p>
+            </div>
+            <div class="settings-grid">
+              <label><span>Machine rate <em>$/hour</em></span><input id="machine-rate" type="number" min="0" step="0.01" required></label>
+              <label><span>Pierce charge <em>$/pierce</em></span><input id="pierce-price" type="number" min="0" step="0.01" required></label>
+              <label><span>Material waste allowance <em>%</em></span><input id="waste-percent" type="number" min="0" step="0.1" required></label>
+              <label><span>Markup <em>%</em></span><input id="markup-percent" type="number" min="0" step="0.1" required></label>
+              <label><span>GST <em>%</em></span><input id="gst-percent" type="number" min="0" step="0.1" required></label>
+              <label><span>Priority multiplier <em>e.g. 1.20</em></span><input id="priority-multiplier" type="number" min="0.01" step="0.01" required></label>
+              <label><span>Base cutting speed <em>mm/min</em></span><input id="base-cut-speed" type="number" min="1" step="1" required></label>
+              <label><span>Minimum cutting speed <em>mm/min</em></span><input id="minimum-cut-speed" type="number" min="1" step="1" required></label>
+              <label><span>Pierce time <em>seconds</em></span><input id="pierce-time" type="number" min="0" step="0.1" required></label>
+            </div>
+            <div class="discount-heading"><h3>Quantity discounts</h3><p>Discount applied to each DXF line when its quantity reaches the threshold.</p></div>
+            <div class="settings-grid three-column">
+              <label><span>5+ items <em>%</em></span><input id="discount-5" type="number" min="0" max="100" step="0.1" required></label>
+              <label><span>10+ items <em>%</em></span><input id="discount-10" type="number" min="0" max="100" step="0.1" required></label>
+              <label><span>20+ items <em>%</em></span><input id="discount-20" type="number" min="0" max="100" step="0.1" required></label>
+            </div>
+          </section>
+
+          <section class="settings-card materials-card">
+            <div class="card-heading materials-heading">
+              <div><p class="panel-kicker">Instant Quote menu</p><h2>Materials and thicknesses</h2></div>
+              <button class="button outline-button" id="add-material" type="button">+ Add material</button>
+            </div>
+            <div id="materials-list" class="materials-list"></div>
+          </section>
+
+          <div class="settings-actions">
+            <div class="backup-actions">
+              <button class="button outline-button" id="export-settings" type="button">Download backup</button>
+              <label class="button outline-button import-button" for="import-settings">Import backup</label>
+              <input id="import-settings" type="file" accept="application/json,.json" hidden>
+              <button class="text-button danger" id="reset-settings" type="button">Restore defaults</button>
+            </div>
+            <div class="save-actions">
+              <span id="save-status" role="status"></span>
+              <button class="button button-primary" type="submit">Save pricing settings</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom"><span>© <span class="current-year"></span> Corten Living.</span><span>Pricing Settings prototype · Gisborne, New Zealand</span></div>
+  </footer>
+</body>
+</html>
