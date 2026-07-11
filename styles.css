@@ -9,11 +9,12 @@
 @media(max-width:900px){.quote-banner-inner{grid-template-columns:auto 1fr}.quote-banner .button{grid-column:1/-1;justify-self:start}}
 @media(max-width:620px){.quote-banner-inner{grid-template-columns:1fr}.quote-banner-icon{display:none}}
 
-/* logo override */
+
+/* Corten Living transparent logo */
 .wordmark{display:inline-flex;flex-direction:row;align-items:center;width:max-content;line-height:1;letter-spacing:0}
-.site-logo{display:block;height:68px;width:auto;max-width:100%}
-.footer-logo .site-logo{height:96px}
+.site-logo{display:block;height:76px;width:auto;max-width:100%}
+.footer-logo .site-logo{height:145px}
 @media(max-width:760px){
-  .site-logo{height:52px}
-  .footer-logo .site-logo{height:76px}
+  .site-logo{height:58px}
+  .footer-logo .site-logo{height:120px}
 }
